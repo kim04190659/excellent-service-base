@@ -4,7 +4,6 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { User } from '@supabase/supabase-js';
 
-// Headerコンポーネントはユーザー情報を受け取り、認証状態に応じて表示を切り替えます
 export default function Header({ user }: { user: User | null }) {
   const router = useRouter();
 
@@ -27,18 +26,24 @@ export default function Header({ user }: { user: User | null }) {
       </div>
       
       {user ? (
-        <button 
-          onClick={handleLogout} 
-          style={{ 
-            padding: '8px 15px', 
-            backgroundColor: '#f44336', // ログアウトボタンの色を変更
-            borderRadius: '5px' 
-          }}
-        >
-          ログアウト ({user.email})
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          {/* 🚨 修正ポイント: 管理画面へのリンクを追加 */}
+          <a href="/admin" style={{ color: '#0070f3', textDecoration: 'none', fontWeight: 'bold' }}>
+            管理
+          </a>
+
+          <button 
+            onClick={handleLogout} 
+            style={{ 
+              padding: '8px 15px', 
+              backgroundColor: '#f44336',
+              borderRadius: '5px' 
+            }}
+          >
+            ログアウト ({user.email})
+          </button>
+        </div>
       ) : (
-        // 未ログイン時はuser=nullが渡される
         <div style={{ color: '#555' }}>AI駆動型MVP</div>
       )}
     </header>
