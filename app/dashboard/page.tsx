@@ -4,8 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { User } from '@supabase/supabase-js';
-
-// ステップ3-3でカスタム見出しを保存する処理を追加します
+import Header from '@/components/Header'; // <-- パスを @/components/Header に修正
 
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -26,14 +25,14 @@ export default function DashboardPage() {
       const currentUser = session.user;
       setUser(currentUser);
       
-      // 🚨 修正ポイント：ユーザー設定の読み込み
+      // ユーザー設定の読み込み
       const { data: settingsData, error: settingsError } = await supabase
         .from('user_settings')
         .select('custom_headline')
         .eq('user_id', currentUser.id)
         .single();
         
-      if (settingsError && settingsError.code !== 'PGRST116') { // PGRST116はデータなしのエラーコード
+      if (settingsError && settingsError.code !== 'PGRST116') {
         console.error('設定の読み込みに失敗:', settingsError);
       } else if (settingsData) {
         setHeadline(settingsData.custom_headline);
@@ -41,11 +40,6 @@ export default function DashboardPage() {
     };
     checkUserAndLoadSettings();
   }, [router]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
-  };
 
   const generateCustomHeadline = async () => {
     if (!preference) return alert('カスタマイズの希望を入力してください。');
@@ -61,7 +55,6 @@ export default function DashboardPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        // 🚨 修正ポイント：ユーザーIDも一緒に渡す
         body: JSON.stringify({ userPreference: preference, userId: user.id }),
       });
 
@@ -85,32 +78,31 @@ export default function DashboardPage() {
   }
 
   return (
-    <div style={{ padding: '20px', maxWidth: '800px', margin: 'auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #ccc', paddingBottom: '10px' }}>
-        <h1>エクセレントサービス基盤 - ダッシュボード</h1>
-        <button onClick={handleLogout} style={{ padding: '8px 15px' }}>ログアウト ({user.email})</button>
+    <>
+      <Header user={user} />
+      <div style={{ padding: '20px', maxWidth: '800px', margin: 'auto' }}>
+        
+        <h2 style={{ color: '#0070f3', marginTop: '20px' }}>{headline}</h2>
+        
+        <div style={{ border: '1px solid #eee', padding: '15px', marginTop: '30px' }}>
+          <h3>あなたのデライト体験をカスタマイズ</h3>
+          <p>サービスをどのように利用したいか、あなたの希望をAIに伝えてください。</p>
+          <textarea
+            value={preference}
+            onChange={(e) => setPreference(e.target.value)}
+            placeholder="例：中小企業のマーケティング効率を上げるために使いたい"
+            rows={3}
+            style={{ width: '100%', padding: '10px', margin: '10px 0' }}
+          />
+          <button 
+            onClick={generateCustomHeadline} 
+            disabled={loading}
+            style={{ padding: '10px 20px', background: '#0070f3', color: 'white' }}
+          >
+            {loading ? 'AIが生成中...' : 'AIにダッシュボードをパーソナライズしてもらう'}
+          </button>
+        </div>
       </div>
-
-      <h2 style={{ color: '#0070f3', marginTop: '20px' }}>{headline}</h2>
-      
-      <div style={{ border: '1px solid #eee', padding: '15px', marginTop: '30px' }}>
-        <h3>あなたのデライト体験をカスタマイズ</h3>
-        <p>サービスをどのように利用したいか、あなたの希望をAIに伝えてください。</p>
-        <textarea
-          value={preference}
-          onChange={(e) => setPreference(e.target.value)}
-          placeholder="例：中小企業のマーケティング効率を上げるために使いたい"
-          rows={3}
-          style={{ width: '100%', padding: '10px', margin: '10px 0' }}
-        />
-        <button 
-          onClick={generateCustomHeadline} 
-          disabled={loading}
-          style={{ padding: '10px 20px', background: '#0070f3', color: 'white' }}
-        >
-          {loading ? 'AIが生成中...' : 'AIにダッシュボードをパーソナライズしてもらう'}
-        </button>
-      </div>
-    </div>
+    </>
   );
 }

@@ -1,86 +1,79 @@
 'use client';
 
+import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Header from '@/components/Header'; // <-- パスを @/components/Header に修正
 
 export default function LoginPage() {
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
   const router = useRouter();
 
-  // ログイン状態のチェックとリダイレクト
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        router.push('/dashboard'); 
-      }
-    });
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (session) {
-          router.push('/dashboard');
-        }
-      }
-    );
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, [router]);
-
-  const handleSignIn = async (isSignUp: boolean) => {
+  const handleAuth = async () => {
     setLoading(true);
-    let error = null;
+    setMessage('');
     
-    if (isSignUp) {
-      const { error: signUpError } = await supabase.auth.signUp({ email, password });
-      error = signUpError;
-      if (!error) alert('登録メールをご確認ください。');
-    } else {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      error = signInError;
+    try {
+      if (isLogin) {
+        // ログイン処理
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        router.push('/dashboard'); // 成功したらダッシュボードへ
+      } else {
+        // 登録処理
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        
+        setMessage('登録成功！すぐにログインできます。');
+        setIsLogin(true);
+      }
+    } catch (error: any) {
+      setMessage(`認証エラー: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
-
-    if (error) {
-      alert(error.message);
-    }
-    setLoading(false);
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '400px', margin: 'auto' }}>
-      <h1>エクセレントサービス基盤 - ログイン</h1>
-      <input
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="メールアドレス"
-        style={{ width: '100%', padding: '10px', margin: '10px 0' }}
-      />
-      <input
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        placeholder="パスワード"
-        style={{ width: '100%', padding: '10px', margin: '10px 0' }}
-      />
-      <button 
-        onClick={() => handleSignIn(false)} 
-        disabled={loading}
-        style={{ padding: '10px 20px', marginRight: '10px' }}
-      >
-        {loading ? '処理中...' : 'ログイン'}
-      </button>
-      <button 
-        onClick={() => handleSignIn(true)} 
-        disabled={loading}
-        style={{ padding: '10px 20px' }}
-      >
-        新規登録
-      </button>
-    </div>
+    <>
+      <Header user={null} />
+      <div style={{ padding: '20px', maxWidth: '400px', margin: '50px auto', border: '1px solid #ddd', borderRadius: '8px', backgroundColor: '#fff' }}>
+        <h2 style={{ textAlign: 'center' }}>
+          {isLogin ? 'ログイン' : '新規登録'}
+        </h2>
+        
+        {message && <p style={{ color: message.startsWith('認証エラー') ? 'red' : 'green' }}>{message}</p>}
+
+        <input
+          type="email"
+          placeholder="メールアドレス"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          style={{ width: '100%' }}
+        />
+        <input
+          type="password"
+          placeholder="パスワード"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          style={{ width: '100%' }}
+        />
+        <button
+          onClick={handleAuth}
+          disabled={loading}
+          style={{ width: '100%', marginBottom: '20px' }}
+        >
+          {loading ? '処理中...' : (isLogin ? 'ログイン' : '登録')}
+        </button>
+
+        <p style={{ textAlign: 'center', cursor: 'pointer', color: '#0070f3' }} onClick={() => setIsLogin(!isLogin)}>
+          {isLogin ? 'アカウントをお持ちではありませんか？新規登録' : 'すでにアカウントをお持ちですか？ログイン'}
+        </p>
+      </div>
+    </>
   );
 }
