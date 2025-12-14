@@ -1,0 +1,12 @@
+{
+  "extends": [
+    "next/core-web-vitals",
+    // Prettierとの競合を避ける設定を追加
+    "prettier"
+  ],
+  "rules": {
+    // 任意のルールをここに追加可能
+    // 例: TypeScriptの型明示を強制する場合
+    // "@typescript-eslint/explicit-module-boundary-types": "off" 
+  }
+}
