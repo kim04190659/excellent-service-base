@@ -14,7 +14,6 @@ export async function POST(request: Request) {
 
   try {
     // 2. APIクライアントの初期化
-    // ⚠️ 修正ポイント: { apiKey } というオブジェクトとしてキーを渡す
     const ai = new GoogleGenAI({ apiKey });
     
     // ユーザーの希望をリクエストボディから取得
@@ -35,6 +34,12 @@ export async function POST(request: Request) {
         contents: prompt,
     });
     
+    // ⚠️ 修正ポイント: response.text の存在チェックを追加
+    if (!response.text) {
+        console.error('Gemini returned an empty response:', response);
+        return NextResponse.json({ error: 'AIが応答を生成できませんでした。' }, { status: 500 });
+    }
+
     const customizedHeadline = response.text.trim();
     
     // 4. 結果をクライアントに返す
