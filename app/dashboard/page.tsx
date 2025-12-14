@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { User } from '@supabase/supabase-js';
 import Header from '@/components/Header';
+import Card from '@/components/Card'; // <-- Cardコンポーネントをインポート
 
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -13,6 +14,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  // 起動時の処理: 認証チェックと設定の読み込み
   useEffect(() => {
     const checkUserAndLoadSettings = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -47,11 +49,10 @@ export default function DashboardPage() {
     setHeadline('AIがあなたのための見出しを生成中です...');
 
     try {
-      // 🚨 修正ポイント： functionId を追加
       const payload = { 
           userPreference: preference, 
           userId: user.id,
-          functionId: 'generate_headline' // <-- AIエージェントのIDを渡す
+          functionId: 'generate_headline'
       };
 
       const response = await fetch('/api/customize', {
@@ -84,27 +85,54 @@ export default function DashboardPage() {
   return (
     <>
       <Header user={user} />
-      <div style={{ padding: '20px', maxWidth: '800px', margin: 'auto' }}>
+      <div style={{ padding: '40px 20px', maxWidth: '1000px', margin: 'auto' }}>
         
-        <h2 style={{ color: '#0070f3', marginTop: '20px' }}>{headline}</h2>
+        {/* 🚨 修正ポイント: Headlineを囲むUIを洗練 */}
+        <Card style={{ marginBottom: '40px', backgroundColor: '#e3f2fd' }}>
+            <h1 style={{ color: '#0070f3', fontSize: '2em', textAlign: 'center', margin: 0 }}>
+                {headline}
+            </h1>
+            <p style={{ textAlign: 'center', color: '#555', marginTop: '10px' }}>
+                この見出しはあなたの目的に合わせてパーソナライズされています。
+            </p>
+        </Card>
         
-        <div style={{ border: '1px solid #eee', padding: '15px', marginTop: '30px' }}>
-          <h3>あなたのデライト体験をカスタマイズ</h3>
-          <p>サービスをどのように利用したいか、あなたの希望をAIに伝えてください。</p>
+        {/* 🚨 修正ポイント: 入力フォームをCardで囲む */}
+        <Card title="🚀 あなたのデライト体験をカスタマイズ" style={{ marginTop: '30px' }}>
+          <p>このサービスで何を達成したいですか？ あなたの希望をAIに伝えてください。</p>
           <textarea
             value={preference}
             onChange={(e) => setPreference(e.target.value)}
             placeholder="例：中小企業のマーケティング効率を上げるために使いたい"
-            rows={3}
-            style={{ width: '100%', padding: '10px', margin: '10px 0' }}
+            rows={4}
+            style={{ 
+                width: '100%', 
+                padding: '12px', 
+                margin: '15px 0',
+                border: '2px solid #ccc',
+                borderRadius: '6px',
+                resize: 'vertical'
+            }}
           />
           <button 
             onClick={generateCustomHeadline} 
             disabled={loading}
-            style={{ padding: '10px 20px', background: '#0070f3', color: 'white' }}
+            style={{ 
+                padding: '12px 25px', 
+                background: loading ? '#90caf9' : '#1976d2', 
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                transition: 'background-color 0.3s',
+            }}
           >
-            {loading ? 'AIが生成中...' : 'AIにダッシュボードをパーソナライズしてもらう'}
+            {loading ? 'AIが思考中...' : 'AIにダッシュボードをパーソナライズしてもらう'}
           </button>
+        </Card>
+
+        <div style={{ marginTop: '50px', color: '#888', textAlign: 'center' }}>
+            <p>エクセレントサービス基盤 v0.1 | AI by Gemini</p>
         </div>
       </div>
     </>
