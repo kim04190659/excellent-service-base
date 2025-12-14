@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { User } from '@supabase/supabase-js';
-import Header from '@/components/Header'; // <-- パスを @/components/Header に修正
+import Header from '@/components/Header';
 
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -13,7 +13,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  // 起動時の処理: 認証チェックと設定の読み込み
   useEffect(() => {
     const checkUserAndLoadSettings = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -25,7 +24,6 @@ export default function DashboardPage() {
       const currentUser = session.user;
       setUser(currentUser);
       
-      // ユーザー設定の読み込み
       const { data: settingsData, error: settingsError } = await supabase
         .from('user_settings')
         .select('custom_headline')
@@ -49,13 +47,19 @@ export default function DashboardPage() {
     setHeadline('AIがあなたのための見出しを生成中です...');
 
     try {
-      // サーバー側のAPI Routeを呼び出し、Geminiに処理を依頼
+      // 🚨 修正ポイント： functionId を追加
+      const payload = { 
+          userPreference: preference, 
+          userId: user.id,
+          functionId: 'generate_headline' // <-- AIエージェントのIDを渡す
+      };
+
       const response = await fetch('/api/customize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userPreference: preference, userId: user.id }),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
