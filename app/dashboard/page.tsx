@@ -37,13 +37,10 @@ export default function DashboardPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [stepHistory, setStepHistory] = useState<Step[]>([]);
   
-  // 郵便番号と最終確認モーダルの状態
   const [postalCode, setPostalCode] = useState('');
-  const [isFinalizing, setIsFinalizing] = useState(false);
-  
-  // 🚨 修正ポイント: 実行結果を保持する状態
+  const [isFinalizing, setIsFinalizing] = useState(false); // 郵便番号入力待ち
   const [finalPrompt, setFinalPrompt] = useState(''); 
-  const [executionResult, setExecutionResult] = useState<string | null>(null); // 実行結果
+  const [executionResult, setExecutionResult] = useState<string | null>(null);
 
   // 起動時の処理... (省略)
   useEffect(() => {
@@ -54,8 +51,6 @@ export default function DashboardPage() {
           return;
         }
         setUser(session.user);
-        
-        // 見出しの読み込み... (省略)
     };
     checkUserAndLoadSettings();
 
@@ -68,16 +63,16 @@ export default function DashboardPage() {
 
 
   const handleChoiceClick = async (stepIndex: number, choiceText: string) => {
-    if (loading || executionResult) return; // 実行結果が出たら操作不可
+    if (loading || executionResult) return;
     
     setLoading(true);
     const newHistory = [...stepHistory];
     newHistory[stepIndex].selected = choiceText;
-    setStepHistory(newHistory);
-
+    
+    // 🚨 修正ポイント1: 最終ステップの選択が完了した瞬間でも、AIに最終プロンプトのヒントを求める
     if (currentStep >= MAX_STEPS) {
         setLoading(false);
-        setIsFinalizing(true);
+        setIsFinalizing(true); // 地域情報収集へ
         return;
     }
 
@@ -96,9 +91,21 @@ export default function DashboardPage() {
 
         const data = await response.json();
         
-        if (response.ok && data.choices) {
+        // 🚨 修正ポイント2: AI応答の構造が変わったため、処理を変更
+        if (response.ok && data.choices && data.nextQuestion) {
+            
+            // 🚨 修正ポイント3: 地域情報が必要な場合は、ここで郵便番号入力に割り込む
+            if (data.needsPostalCode) {
+                // 地域情報が必要な場合は、一旦選択を記録し、郵便番号入力へ移行
+                setStepHistory(newHistory); // 選択済みの履歴を保存
+                setLoading(false);
+                setIsFinalizing(true);
+                return;
+            }
+
+            // 次のステップのデータを履歴に追加
             newHistory.push({
-                question: `「${choiceText}」を選びました。次に詳しく教えてください。`, 
+                question: data.nextQuestion, // AIが生成した質問文を使用
                 choices: data.choices, 
                 selected: null 
             });
@@ -106,7 +113,7 @@ export default function DashboardPage() {
             setStepHistory(newHistory);
             setCurrentStep(currentStep + 1);
         } else {
-            alert(`選択肢生成に失敗しました: ${data.error}`);
+            alert(`選択肢生成に失敗しました: ${data.error || '不明なエラー'}`);
             newHistory[stepIndex].selected = null;
             setStepHistory(newHistory);
         }
@@ -118,7 +125,7 @@ export default function DashboardPage() {
     }
   };
   
-  // 🚨 修正ポイント: 郵便番号入力後の処理 (最終プロンプト生成)
+  // 郵便番号入力後の処理 (最終プロンプト生成)
   const handleFinalize = () => {
       if (!postalCode || postalCode.length !== 7) {
           alert('7桁の郵便番号を正しく入力してください。');
@@ -130,21 +137,20 @@ export default function DashboardPage() {
       
       setFinalPrompt(generatedPrompt);
       setIsFinalizing(false); 
-      // 実行準備完了状態へ
   };
   
-  // 🚨 新規実装: 実行エージェントの呼び出し
+  // 実行エージェントの呼び出し
   const handleExecuteAgent = async () => {
     if (loading || !finalPrompt) return;
     
     setLoading(true);
-    setExecutionResult(null); // 結果をリセット
+    setExecutionResult(null); 
     
     try {
         const payload = {
             userId: user?.id,
             functionId: 'executor',
-            finalPrompt: finalPrompt // 実行エージェントに最終プロンプトを渡す
+            finalPrompt: finalPrompt
         };
 
         const response = await fetch('/api/customize', {
@@ -157,7 +163,6 @@ export default function DashboardPage() {
         
         if (response.ok && data.result) {
             setExecutionResult(data.result);
-            // 実行後はステップ履歴をリセットし、最初の状態に戻す
             setCurrentStep(1);
             setStepHistory([
                 { question: 'まず、あなたがしたいことは何ですか？', choices: INITIAL_CHOICES, selected: null }
@@ -196,7 +201,6 @@ export default function DashboardPage() {
             </p>
         </Card>
         
-        {/* 🚨 実行結果の表示エリア */}
         {executionResult && (
             <Card title="🤖 AIエージェント実行結果" style={{ marginBottom: '40px', backgroundColor: '#fff3e0', border: '2px solid #ff9800' }}>
                 <p style={{ fontWeight: 'bold' }}>AIがあなたの目標を達成するために以下のプロセスを実行しました。</p>
@@ -243,7 +247,7 @@ export default function DashboardPage() {
               
               {loading && (
                   <div style={{ textAlign: 'center', marginTop: '20px', color: '#0070f3' }}>
-                      AIが次の選択肢を生成中...しばらくお待ちください。
+                      AIが次のステップを生成中...しばらくお待ちください。
                   </div>
               )}
               
@@ -277,12 +281,12 @@ export default function DashboardPage() {
                   ))}
                   
                   {/* 戻るボタン */}
-                  {currentStep > 1 && !isFinalizing && (
+                  {currentStep > 1 && !isFinalizing && !finalPrompt && (
                       <button 
                           onClick={() => {
                               setStepHistory(stepHistory.slice(0, currentStep - 1));
                               setCurrentStep(currentStep - 1);
-                              setFinalPrompt(''); // 戻る場合は最終プロンプトもリセット
+                              setFinalPrompt('');
                           }}
                           disabled={loading}
                           style={{ marginTop: '10px', padding: '8px 15px', backgroundColor: '#ff9800', color: 'white' }}
@@ -306,7 +310,7 @@ export default function DashboardPage() {
                 zIndex: 1000
             }}>
                 <Card title="📍 実行する地域を教えてください" style={{ maxWidth: '400px', width: '90%' }}>
-                    <p>この情報は、AIがあなたに最も近いお店やサービスを探すために使われます。</p>
+                    <p>AIがあなたのためにサービスを探すために、**郵便番号（7桁）**を入力してください。</p>
                     <input
                         type="number"
                         placeholder="例: 1234567 (7桁)"
@@ -329,8 +333,9 @@ export default function DashboardPage() {
                     </button>
                     <button 
                         onClick={() => {
+                            // キャンセル時: 選択前のステップに戻す
+                            setStepHistory(stepHistory.slice(0, currentStep));
                             setIsFinalizing(false);
-                            // キャンセルの場合、前のステップに戻る処理を実装する（今回は簡略化のためステップ3のままUIを戻す）
                         }}
                         style={{ padding: '10px 20px', backgroundColor: '#ccc', color: '#333' }}
                     >
@@ -341,7 +346,7 @@ export default function DashboardPage() {
         )}
 
         <div style={{ marginTop: '50px', color: '#888', textAlign: 'center' }}>
-            <p>エクセレントサービス基盤 v0.2 | AI by Gemini</p>
+            <p>エクセレントサービス基盤 v0.3 | AI by Gemini</p>
         </div>
       </div>
     </>
