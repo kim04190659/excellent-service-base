@@ -14,7 +14,8 @@ export async function POST(request: Request) {
 
   try {
     // 2. APIクライアントの初期化
-    const ai = new GoogleGenAI(apiKey);
+    // ⚠️ 修正ポイント: { apiKey } というオブジェクトとしてキーを渡す
+    const ai = new GoogleGenAI({ apiKey });
     
     // ユーザーの希望をリクエストボディから取得
     const { userPreference } = await request.json(); 
