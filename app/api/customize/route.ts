@@ -1,35 +1,41 @@
 import { GoogleGenAI } from '@google/genai';
 import { NextResponse } from 'next/server';
-// 🚨 修正ポイント：サーバーサイドで利用するSupabaseクライアントをインポート
 import { createServerSupabaseClient } from '@/lib/supabase-server'; 
 
-// POSTリクエストを処理する関数（ユーザーの入力を受け取る）
+// POSTリクエストを処理する関数
 export async function POST(request: Request) {
-  // 1. APIキーのチェックを最初に厳密に行う
   const apiKey = process.env.GEMINI_API_KEY;
-
   if (!apiKey) {
     console.error("GEMINI_API_KEY is not configured.");
     return NextResponse.json({ error: "Server configuration error: Gemini API Key is missing." }, { status: 500 });
   }
 
   try {
-    // 2. APIクライアントの初期化
     const ai = new GoogleGenAI({ apiKey });
-    
-    // ユーザーの希望とIDをリクエストボディから取得
-    const { userPreference, userId } = await request.json(); // 🚨 修正ポイント：userIdを取得
+    const { userPreference, userId } = await request.json();
 
     if (!userPreference || !userId) {
       return NextResponse.json({ error: "User preference and ID are required." }, { status: 400 });
     }
 
-    // 3. Geminiへのプロンプト設定と呼び出し（前回と同じ）
-    const prompt = `あなたは、優れたサービス基盤のパーソナライズAIです。
-    ユーザーは「${userPreference}」という目的でサービスを利用します。
-    このユーザーにデライトを与える、魅力的なダッシュボードの新しい見出し案を1つ提案してください。
-    提案は、日本語の短文のみで、それ以外の説明文は不要です。`;
+    const supabaseServer = createServerSupabaseClient();
+    
+    // 1. 🚨 修正ポイント: DBからプロンプトテンプレートを読み込む
+    const { data: promptData, error: promptError } = await supabaseServer
+        .from('ai_prompts')
+        .select('template_text')
+        .eq('id', 'headline_generator') // 作成したIDでテンプレートを取得
+        .single();
+        
+    if (promptError || !promptData || !promptData.template_text) {
+        console.error('Failed to load prompt template:', promptError);
+        return NextResponse.json({ error: 'AIプロンプトのロードに失敗しました' }, { status: 500 });
+    }
 
+    // 2. 🚨 修正ポイント: テンプレート変数 ({preference}) をユーザー入力で置換
+    let prompt = promptData.template_text.replace('{preference}', userPreference);
+
+    // 3. Geminiへのプロンプト設定と呼び出し
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
@@ -42,10 +48,7 @@ export async function POST(request: Request) {
 
     const customizedHeadline = response.text.trim();
     
-    // 🚨 修正ポイント：Supabaseへの書き込み処理
-    const supabaseServer = createServerSupabaseClient();
-    
-    // 既存の設定があるかチェック
+    // 4. Supabaseへの書き込み処理（前回と同じロジック）
     const { data: existingSetting } = await supabaseServer
         .from('user_settings')
         .select('id')
@@ -53,19 +56,17 @@ export async function POST(request: Request) {
         .single();
 
     if (existingSetting) {
-        // 既存設定があればUPDATE
         await supabaseServer
             .from('user_settings')
             .update({ custom_headline: customizedHeadline })
             .eq('user_id', userId);
     } else {
-        // なければINSERT
         await supabaseServer
             .from('user_settings')
             .insert([{ user_id: userId, custom_headline: customizedHeadline }]);
     }
     
-    // 4. 結果をクライアントに返す
+    // 5. 結果をクライアントに返す
     return NextResponse.json({ headline: customizedHeadline });
   } catch (error) {
     console.error('API Error:', error);
