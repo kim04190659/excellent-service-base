@@ -1,5 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { NextResponse } from 'next/server';
+// 🚨 修正ポイント：サーバーサイドで利用するSupabaseクライアントをインポート
+import { createServerSupabaseClient } from '@/lib/supabase-server'; 
 
 // POSTリクエストを処理する関数（ユーザーの入力を受け取る）
 export async function POST(request: Request) {
@@ -8,7 +10,6 @@ export async function POST(request: Request) {
 
   if (!apiKey) {
     console.error("GEMINI_API_KEY is not configured.");
-    // キーがない場合はクライアントにエラーを返す
     return NextResponse.json({ error: "Server configuration error: Gemini API Key is missing." }, { status: 500 });
   }
 
@@ -16,14 +17,14 @@ export async function POST(request: Request) {
     // 2. APIクライアントの初期化
     const ai = new GoogleGenAI({ apiKey });
     
-    // ユーザーの希望をリクエストボディから取得
-    const { userPreference } = await request.json(); 
+    // ユーザーの希望とIDをリクエストボディから取得
+    const { userPreference, userId } = await request.json(); // 🚨 修正ポイント：userIdを取得
 
-    if (!userPreference) {
-      return NextResponse.json({ error: "User preference is required." }, { status: 400 });
+    if (!userPreference || !userId) {
+      return NextResponse.json({ error: "User preference and ID are required." }, { status: 400 });
     }
 
-    // 3. Geminiへのプロンプト設定と呼び出し
+    // 3. Geminiへのプロンプト設定と呼び出し（前回と同じ）
     const prompt = `あなたは、優れたサービス基盤のパーソナライズAIです。
     ユーザーは「${userPreference}」という目的でサービスを利用します。
     このユーザーにデライトを与える、魅力的なダッシュボードの新しい見出し案を1つ提案してください。
@@ -34,7 +35,6 @@ export async function POST(request: Request) {
         contents: prompt,
     });
     
-    // ⚠️ 修正ポイント: response.text の存在チェックを追加
     if (!response.text) {
         console.error('Gemini returned an empty response:', response);
         return NextResponse.json({ error: 'AIが応答を生成できませんでした。' }, { status: 500 });
@@ -42,11 +42,33 @@ export async function POST(request: Request) {
 
     const customizedHeadline = response.text.trim();
     
+    // 🚨 修正ポイント：Supabaseへの書き込み処理
+    const supabaseServer = createServerSupabaseClient();
+    
+    // 既存の設定があるかチェック
+    const { data: existingSetting } = await supabaseServer
+        .from('user_settings')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+
+    if (existingSetting) {
+        // 既存設定があればUPDATE
+        await supabaseServer
+            .from('user_settings')
+            .update({ custom_headline: customizedHeadline })
+            .eq('user_id', userId);
+    } else {
+        // なければINSERT
+        await supabaseServer
+            .from('user_settings')
+            .insert([{ user_id: userId, custom_headline: customizedHeadline }]);
+    }
+    
     // 4. 結果をクライアントに返す
     return NextResponse.json({ headline: customizedHeadline });
   } catch (error) {
-    console.error('Gemini API Call Error:', error);
-    // 予期せぬエラーとして500を返す
-    return NextResponse.json({ error: 'AIによるカスタマイズ処理中に予期せぬエラーが発生しました' }, { status: 500 });
+    console.error('API Error:', error);
+    return NextResponse.json({ error: '処理中に予期せぬエラーが発生しました' }, { status: 500 });
   }
 }

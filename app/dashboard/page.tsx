@@ -1,31 +1,45 @@
 'use client';
 
-// 修正ポイント: SupabaseからUser型をインポート
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { User } from '@supabase/supabase-js'; // <-- ここを追加
+import { User } from '@supabase/supabase-js';
+
+// ステップ3-3でカスタム見出しを保存する処理を追加します
 
 export default function DashboardPage() {
-  // 修正ポイント: useStateの型を User | null に変更
   const [user, setUser] = useState<User | null>(null);
   const [preference, setPreference] = useState('');
   const [headline, setHeadline] = useState('ようこそ！');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  // 起動時の処理: 認証チェックと設定の読み込み
   useEffect(() => {
-    // 認証状態の確認
-    const checkUser = async () => {
+    const checkUserAndLoadSettings = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        router.push('/login'); // 未ログインならログインページへ
-      } else {
-        // session.user は User 型なので問題なし
-        setUser(session.user);
+        router.push('/login');
+        return;
+      }
+      
+      const currentUser = session.user;
+      setUser(currentUser);
+      
+      // 🚨 修正ポイント：ユーザー設定の読み込み
+      const { data: settingsData, error: settingsError } = await supabase
+        .from('user_settings')
+        .select('custom_headline')
+        .eq('user_id', currentUser.id)
+        .single();
+        
+      if (settingsError && settingsError.code !== 'PGRST116') { // PGRST116はデータなしのエラーコード
+        console.error('設定の読み込みに失敗:', settingsError);
+      } else if (settingsData) {
+        setHeadline(settingsData.custom_headline);
       }
     };
-    checkUser();
+    checkUserAndLoadSettings();
   }, [router]);
 
   const handleLogout = async () => {
@@ -35,6 +49,7 @@ export default function DashboardPage() {
 
   const generateCustomHeadline = async () => {
     if (!preference) return alert('カスタマイズの希望を入力してください。');
+    if (!user) return alert('ユーザー情報がありません。');
     
     setLoading(true);
     setHeadline('AIがあなたのための見出しを生成中です...');
@@ -46,7 +61,8 @@ export default function DashboardPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userPreference: preference }),
+        // 🚨 修正ポイント：ユーザーIDも一緒に渡す
+        body: JSON.stringify({ userPreference: preference, userId: user.id }),
       });
 
       const data = await response.json();
@@ -65,7 +81,7 @@ export default function DashboardPage() {
   };
 
   if (!user) {
-    return <div style={{ padding: '20px' }}>認証中...</div>;
+    return <div style={{ padding: '40px', textAlign: 'center' }}>サービスを起動中...</div>;
   }
 
   return (
